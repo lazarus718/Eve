@@ -24,4 +24,3 @@ jobs:
         run: mypy src
       - name: Pytest
         run: PYTHONPATH=src pytest
-
