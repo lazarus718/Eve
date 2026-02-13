@@ -53,8 +53,8 @@ def parse_args() -> argparse.Namespace:
     eve_parser.add_argument(
         "--sample-size",
         type=int,
-        default=30,
-        help="How many candidate items to scan before ranking",
+        default=75,
+        help="How many candidate items to scan before ranking (default: 75)",
     )
     eve_parser.add_argument(
         "--json",
@@ -70,7 +70,7 @@ def parse_args() -> argparse.Namespace:
         "--max-buy-price",
         type=float,
         default=DEFAULT_MAX_BUY_PRICE,
-        help="Maximum best-buy price to include in results (default: 250000 ISK)",
+        help="Maximum best-buy price to include in results (default: 250000000 ISK)",
     )
 
     return parser.parse_args()
@@ -132,7 +132,11 @@ def format_eve_market_output(
         return [json.dumps(payload, indent=2)]
 
     if not opportunities:
-        return ["No profitable opportunities found in current sample."]
+        return [
+            "No profitable opportunities found in current sample.",
+            "Pipeline checks: candidate prefilter by average price and budget, "
+            "then sampled order books, then positive spread + budget checks.",
+        ]
 
     lines = [
         "Top "
