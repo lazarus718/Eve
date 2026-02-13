@@ -8,9 +8,12 @@ from pathlib import Path
 from urllib.error import URLError
 
 from .eve_market import (
+    DEFAULT_BROKER_FEE_PCT,
     DEFAULT_MAX_BUY_PRICE,
     DEFAULT_MIN_DAILY_VOLUME,
+    DEFAULT_MIN_NET_PROFIT,
     DEFAULT_REGION_ID,
+    DEFAULT_SALES_TAX_PCT,
     ItemOpportunity,
     top_opportunities,
 )
@@ -79,6 +82,24 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MIN_DAILY_VOLUME,
         help="Minimum latest daily trade volume required (default: 100 units/day)",
     )
+    eve_parser.add_argument(
+        "--sales-tax-pct",
+        type=float,
+        default=DEFAULT_SALES_TAX_PCT,
+        help="Sales tax percentage used for net profit filter (default: 4.5)",
+    )
+    eve_parser.add_argument(
+        "--broker-fee-pct",
+        type=float,
+        default=DEFAULT_BROKER_FEE_PCT,
+        help="Broker fee percentage used for net profit filter (default: 3.0)",
+    )
+    eve_parser.add_argument(
+        "--min-net-profit",
+        type=float,
+        default=DEFAULT_MIN_NET_PROFIT,
+        help="Minimum post-fee profit per unit to include (default: 0)",
+    )
 
     return parser.parse_args()
 
@@ -91,10 +112,13 @@ def _format_opportunity_row(
     spread: float,
     roi: float,
     daily_volume: float,
+    net_profit: float,
+    net_roi_pct: float,
 ) -> str:
     return (
-        f"{rank:>2}. {name:<28} buy={buy:>12,.2f} sell={sell:>12,.2f} "
-        f"spread={spread:>11,.2f} roi={roi:>6.2f}% daily_vol={daily_volume:>8,.0f}"
+        f"{rank:>2}. {name:<24} buy={buy:>11,.2f} sell={sell:>11,.2f} "
+        f"spread={spread:>10,.2f} roi={roi:>6.2f}% net={net_profit:>10,.2f} "
+        f"net_roi={net_roi_pct:>6.2f}% daily_vol={daily_volume:>8,.0f}"
     )
 
 
@@ -108,6 +132,8 @@ def _opportunity_to_dict(rank: int, item: ItemOpportunity) -> dict[str, float | 
         "spread": item.spread,
         "roi_pct": item.roi_pct,
         "daily_volume": item.daily_volume,
+        "net_profit": item.net_profit,
+        "net_roi_pct": item.net_roi_pct,
     }
 
 
@@ -117,6 +143,9 @@ def run_eve_market(
     sample_size: int,
     max_buy_price: float,
     min_daily_volume: float,
+    sales_tax_pct: float,
+    broker_fee_pct: float,
+    min_net_profit: float,
 ) -> list[ItemOpportunity]:
     """Execute market analysis and return computed opportunities."""
     return top_opportunities(
@@ -125,6 +154,9 @@ def run_eve_market(
         sample_size=sample_size,
         max_buy_price=max_buy_price,
         min_daily_volume=min_daily_volume,
+        sales_tax_pct=sales_tax_pct,
+        broker_fee_pct=broker_fee_pct,
+        min_net_profit=min_net_profit,
     )
 
 
@@ -134,6 +166,9 @@ def format_eve_market_output(
     sample_size: int,
     as_json: bool,
     min_daily_volume: float,
+    sales_tax_pct: float,
+    broker_fee_pct: float,
+    min_net_profit: float,
 ) -> list[str]:
     """Format opportunities as plain text or JSON lines."""
     if as_json:
@@ -141,6 +176,9 @@ def format_eve_market_output(
             "region_id": region_id,
             "sample_size": sample_size,
             "min_daily_volume": min_daily_volume,
+            "sales_tax_pct": sales_tax_pct,
+            "broker_fee_pct": broker_fee_pct,
+            "min_net_profit": min_net_profit,
             "count": len(opportunities),
             "opportunities": [
                 _opportunity_to_dict(index, item)
@@ -152,15 +190,16 @@ def format_eve_market_output(
     if not opportunities:
         return [
             "No profitable opportunities found in current sample.",
-            "Pipeline checks: average price cap -> daily volume filter -> "
-            "spread and budget checks.",
-            f"Current minimum daily volume filter: {min_daily_volume:,.0f} units/day.",
+            "Pipeline checks: average price cap -> daily volume -> fees/taxes -> net profit.",
+            f"Current filters: min daily volume={min_daily_volume:,.0f}, "
+            f"min net profit={min_net_profit:,.2f}.",
         ]
 
     lines = [
         "Top "
         f"{len(opportunities)} opportunities in region {region_id} "
-        f"(sampled {sample_size} items, min daily volume {min_daily_volume:,.0f}):",
+        f"(sampled {sample_size}, min daily vol {min_daily_volume:,.0f}, "
+        f"tax {sales_tax_pct:.2f}%, broker {broker_fee_pct:.2f}%):",
     ]
     for index, item in enumerate(opportunities, start=1):
         lines.append(
@@ -172,6 +211,8 @@ def format_eve_market_output(
                 item.spread,
                 item.roi_pct,
                 item.daily_volume,
+                item.net_profit,
+                item.net_roi_pct,
             )
         )
     return lines
@@ -204,6 +245,9 @@ def main() -> None:
                 args.sample_size,
                 args.max_buy_price,
                 args.min_daily_volume,
+                args.sales_tax_pct,
+                args.broker_fee_pct,
+                args.min_net_profit,
             )
             lines = format_eve_market_output(
                 opportunities,
@@ -211,6 +255,9 @@ def main() -> None:
                 sample_size=args.sample_size,
                 as_json=args.json,
                 min_daily_volume=args.min_daily_volume,
+                sales_tax_pct=args.sales_tax_pct,
+                broker_fee_pct=args.broker_fee_pct,
+                min_net_profit=args.min_net_profit,
             )
             write_output(lines, args.output)
         except URLError as error:
