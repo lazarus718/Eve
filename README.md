@@ -18,14 +18,14 @@ For this repo, the stack is Python + pytest + Ruff + mypy + GitHub Actions.
 
 The `eve-market` command queries EVE's public ESI API and ranks items by market spread
 (best sell minus best buy) to highlight potentially profitable flips. It now also filters
-by minimum daily regional trade volume to avoid thin markets.
+by minimum daily regional trade volume and estimated post-fee net profit to avoid thin markets and low-margin traps.
 
 By default it:
 
 - scans **The Forge** region (`region_id=10000002`)
 - samples candidate items from `/markets/prices/`
 - fetches order books for each sampled item
-- calculates per-item spread and ROI% plus latest daily regional volume
+- calculates per-item spread and ROI% plus latest daily regional volume and post-fee net profit
 - prints the top opportunities
 
 ## Project layout
@@ -74,19 +74,19 @@ PYTHONPATH=src python -m testing_app.main greet --name "Newcomer" --lang fr
 EVE market mode:
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000 --min-daily-volume 100
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000 --min-daily-volume 100 --sales-tax-pct 4.5 --broker-fee-pct 3.0 --min-net-profit 0
 ```
 
 JSON output for scripting/spreadsheets:
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000 --min-daily-volume 100 --json
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000 --min-daily-volume 100 --sales-tax-pct 4.5 --broker-fee-pct 3.0 --min-net-profit 0 --json
 ```
 
 Write report directly to a file (`--output`):
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000 --min-daily-volume 100 --json --output reports/eve_report.json
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000 --min-daily-volume 100 --sales-tax-pct 4.5 --broker-fee-pct 3.0 --min-net-profit 0 --json --output reports/eve_report.json
 ```
 
 ## Notes
@@ -98,10 +98,12 @@ PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 
   2. Sort candidates by average price (highest first) and sample up to `--sample-size` (default 75).
   3. Fetch latest daily regional volume from `/markets/{region_id}/history/` and apply `--min-daily-volume`.
   4. Fetch regional order books for remaining items and compute best buy/best sell spread.
-  5. Keep only profitable items with `spread > 0` and `best_buy <= max_buy_price`, then rank by spread.
-- Reported opportunities are raw spread-based estimates and do **not** subtract broker fees,
-  sales tax, hauling risk, volume limits, or price movement risk.
+  5. Apply estimated costs (`--sales-tax-pct` + `--broker-fee-pct`) to compute post-fee net profit per unit.
+  6. Keep only items with `spread > 0`, `best_buy <= max_buy_price`, and `net_profit >= min_net_profit`, then rank by net profit.
+- Cost assumptions are configurable via `--sales-tax-pct` and `--broker-fee-pct`; defaults are 4.5% and 3.0%.
 - Default minimum daily volume filter is `100` units/day; tune with `--min-daily-volume`.
+- Default minimum net-profit filter is `0` ISK/unit; tune with `--min-net-profit`.
+- Results still do not model hauling risk, order modification cadence, or future price movement risk.
 
 ## Major market hub region IDs
 
@@ -116,6 +118,6 @@ Use these with `--region-id` to scan common trade hubs:
 Example:
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000043 --top 15 --sample-size 500 --max-buy-price 125000000 --min-daily-volume 10
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000043 --top 25 --sample-size 75 --max-buy-price 250000000 --min-daily-volume 100 --sales-tax-pct 4.5 --broker-fee-pct 3.0 --min-net-profit 0
 ```
 
