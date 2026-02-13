@@ -7,7 +7,12 @@ import json
 from pathlib import Path
 from urllib.error import URLError
 
-from .eve_market import DEFAULT_REGION_ID, ItemOpportunity, top_opportunities
+from .eve_market import (
+    DEFAULT_MAX_BUY_PRICE,
+    DEFAULT_REGION_ID,
+    ItemOpportunity,
+    top_opportunities,
+)
 
 SUPPORTED_LANGUAGES: dict[str, str] = {
     "en": "Hello",
@@ -61,6 +66,12 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         help="Optional output file path for report content",
     )
+    eve_parser.add_argument(
+        "--max-buy-price",
+        type=float,
+        default=DEFAULT_MAX_BUY_PRICE,
+        help="Maximum best-buy price to include in results (default: 250000 ISK)",
+    )
 
     return parser.parse_args()
 
@@ -86,9 +97,19 @@ def _opportunity_to_dict(rank: int, item: ItemOpportunity) -> dict[str, float | 
     }
 
 
-def run_eve_market(region_id: int, top: int, sample_size: int) -> list[ItemOpportunity]:
+def run_eve_market(
+    region_id: int,
+    top: int,
+    sample_size: int,
+    max_buy_price: float,
+) -> list[ItemOpportunity]:
     """Execute market analysis and return computed opportunities."""
-    return top_opportunities(region_id=region_id, limit=top, sample_size=sample_size)
+    return top_opportunities(
+        region_id=region_id,
+        limit=top,
+        sample_size=sample_size,
+        max_buy_price=max_buy_price,
+    )
 
 
 def format_eve_market_output(
@@ -148,7 +169,9 @@ def main() -> None:
 
     if args.command == "eve-market":
         try:
-            opportunities = run_eve_market(args.region_id, args.top, args.sample_size)
+            opportunities = run_eve_market(
+                args.region_id, args.top, args.sample_size, args.max_buy_price
+            )
             lines = format_eve_market_output(
                 opportunities,
                 region_id=args.region_id,
