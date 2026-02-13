@@ -9,7 +9,7 @@ from urllib import parse, request
 
 ESI_BASE_URL = "https://esi.evetech.net/latest"
 DEFAULT_REGION_ID = 10000002  # The Forge (Jita)
-DEFAULT_MAX_BUY_PRICE = 250_000.0
+DEFAULT_MAX_BUY_PRICE = 250_000_000.0
 
 
 @dataclass(frozen=True)
@@ -34,7 +34,7 @@ def _request_json(url: str, data: bytes | None = None) -> tuple[Any, dict[str, s
     return payload, headers
 
 
-def fetch_market_prices(limit: int = 30) -> list[int]:
+def fetch_market_prices(limit: int = 75, max_average_price: float | None = None) -> list[int]:
     """Return type IDs for candidate items using market average prices."""
     url = f"{ESI_BASE_URL}/markets/prices/?datasource=tranquility"
     payload, _ = _request_json(url)
@@ -45,6 +45,8 @@ def fetch_market_prices(limit: int = 30) -> list[int]:
         and isinstance(entry.get("type_id"), int)
         and isinstance(entry.get("average_price"), (int, float))
     ]
+    if max_average_price is not None:
+        prices = [entry for entry in prices if float(entry["average_price"]) <= max_average_price]
     prices.sort(key=lambda entry: float(entry["average_price"]), reverse=True)
     return [int(entry["type_id"]) for entry in prices[:limit]]
 
@@ -133,11 +135,11 @@ def calculate_opportunity(
 def top_opportunities(
     region_id: int = DEFAULT_REGION_ID,
     limit: int = 10,
-    sample_size: int = 30,
+    sample_size: int = 75,
     max_buy_price: float = DEFAULT_MAX_BUY_PRICE,
 ) -> list[ItemOpportunity]:
     """Compute top profitable market opportunities from sampled items."""
-    candidate_ids = fetch_market_prices(limit=sample_size)
+    candidate_ids = fetch_market_prices(limit=sample_size, max_average_price=max_buy_price)
     names = fetch_item_names(candidate_ids)
 
     opportunities: list[ItemOpportunity] = []
