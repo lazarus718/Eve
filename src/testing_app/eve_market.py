@@ -134,7 +134,7 @@ def calculate_opportunity(
 
 def top_opportunities(
     region_id: int = DEFAULT_REGION_ID,
-    limit: int = 10,
+    limit: int = 25,
     sample_size: int = 75,
     max_buy_price: float = DEFAULT_MAX_BUY_PRICE,
 ) -> list[ItemOpportunity]:
