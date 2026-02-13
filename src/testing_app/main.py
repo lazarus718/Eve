@@ -9,6 +9,7 @@ from urllib.error import URLError
 
 from .eve_market import (
     DEFAULT_MAX_BUY_PRICE,
+    DEFAULT_MIN_DAILY_VOLUME,
     DEFAULT_REGION_ID,
     ItemOpportunity,
     top_opportunities,
@@ -72,16 +73,28 @@ def parse_args() -> argparse.Namespace:
         default=DEFAULT_MAX_BUY_PRICE,
         help="Maximum best-buy price to include in results (default: 250000000 ISK)",
     )
+    eve_parser.add_argument(
+        "--min-daily-volume",
+        type=float,
+        default=DEFAULT_MIN_DAILY_VOLUME,
+        help="Minimum latest daily trade volume required (default: 100 units/day)",
+    )
 
     return parser.parse_args()
 
 
 def _format_opportunity_row(
-    rank: int, name: str, buy: float, sell: float, spread: float, roi: float
+    rank: int,
+    name: str,
+    buy: float,
+    sell: float,
+    spread: float,
+    roi: float,
+    daily_volume: float,
 ) -> str:
     return (
-        f"{rank:>2}. {name:<35} buy={buy:>12,.2f} sell={sell:>12,.2f} "
-        f"spread={spread:>12,.2f} roi={roi:>6.2f}%"
+        f"{rank:>2}. {name:<28} buy={buy:>12,.2f} sell={sell:>12,.2f} "
+        f"spread={spread:>11,.2f} roi={roi:>6.2f}% daily_vol={daily_volume:>8,.0f}"
     )
 
 
@@ -94,6 +107,7 @@ def _opportunity_to_dict(rank: int, item: ItemOpportunity) -> dict[str, float | 
         "best_sell": item.best_sell,
         "spread": item.spread,
         "roi_pct": item.roi_pct,
+        "daily_volume": item.daily_volume,
     }
 
 
@@ -102,6 +116,7 @@ def run_eve_market(
     top: int,
     sample_size: int,
     max_buy_price: float,
+    min_daily_volume: float,
 ) -> list[ItemOpportunity]:
     """Execute market analysis and return computed opportunities."""
     return top_opportunities(
@@ -109,6 +124,7 @@ def run_eve_market(
         limit=top,
         sample_size=sample_size,
         max_buy_price=max_buy_price,
+        min_daily_volume=min_daily_volume,
     )
 
 
@@ -117,12 +133,14 @@ def format_eve_market_output(
     region_id: int,
     sample_size: int,
     as_json: bool,
+    min_daily_volume: float,
 ) -> list[str]:
     """Format opportunities as plain text or JSON lines."""
     if as_json:
         payload = {
             "region_id": region_id,
             "sample_size": sample_size,
+            "min_daily_volume": min_daily_volume,
             "count": len(opportunities),
             "opportunities": [
                 _opportunity_to_dict(index, item)
@@ -134,19 +152,26 @@ def format_eve_market_output(
     if not opportunities:
         return [
             "No profitable opportunities found in current sample.",
-            "Pipeline checks: candidate prefilter by average price and budget, "
-            "then sampled order books, then positive spread + budget checks.",
+            "Pipeline checks: average price cap -> daily volume filter -> "
+            "spread and budget checks.",
+            f"Current minimum daily volume filter: {min_daily_volume:,.0f} units/day.",
         ]
 
     lines = [
         "Top "
         f"{len(opportunities)} opportunities in region {region_id} "
-        f"(sampled {sample_size} items):",
+        f"(sampled {sample_size} items, min daily volume {min_daily_volume:,.0f}):",
     ]
     for index, item in enumerate(opportunities, start=1):
         lines.append(
             _format_opportunity_row(
-                index, item.name, item.best_buy, item.best_sell, item.spread, item.roi_pct
+                index,
+                item.name,
+                item.best_buy,
+                item.best_sell,
+                item.spread,
+                item.roi_pct,
+                item.daily_volume,
             )
         )
     return lines
@@ -174,13 +199,18 @@ def main() -> None:
     if args.command == "eve-market":
         try:
             opportunities = run_eve_market(
-                args.region_id, args.top, args.sample_size, args.max_buy_price
+                args.region_id,
+                args.top,
+                args.sample_size,
+                args.max_buy_price,
+                args.min_daily_volume,
             )
             lines = format_eve_market_output(
                 opportunities,
                 region_id=args.region_id,
                 sample_size=args.sample_size,
                 as_json=args.json,
+                min_daily_volume=args.min_daily_volume,
             )
             write_output(lines, args.output)
         except URLError as error:
