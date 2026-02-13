@@ -82,7 +82,7 @@ JSON output for scripting/spreadsheets:
 PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30 --json
 ```
 
-## Notes
+Write report directly to a file (`--output`):
 
 ```bash
 PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30 --json --output reports/eve_report.json
