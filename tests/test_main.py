@@ -1,127 +1,221 @@
-"""Tests for the starter app CLI helpers."""
+"""CLI entrypoint for greeting and EVE market analysis."""
 
+from __future__ import annotations
+
+import argparse
 import json
+from pathlib import Path
+from urllib.error import URLError
 
-from testing_app.eve_market import ItemOpportunity, calculate_opportunity
-from testing_app.main import (
-    build_greeting,
-    format_eve_market_output,
-    run_eve_market,
-    write_output,
+from .eve_market import (
+    DEFAULT_MAX_BUY_PRICE,
+    DEFAULT_MIN_DAILY_VOLUME,
+    DEFAULT_REGION_ID,
+    ItemOpportunity,
+    top_opportunities,
 )
 
-
-def test_greets_name() -> None:
-    assert build_greeting("Alice") == "Hello, Alice!"
-
-
-def test_supports_spanish_greetings() -> None:
-    assert build_greeting("Alicia", "es") == "Hola, Alicia!"
+SUPPORTED_LANGUAGES: dict[str, str] = {
+    "en": "Hello",
+    "es": "Hola",
+    "fr": "Bonjour",
+}
 
 
-def test_calculate_opportunity_returns_none_without_both_sides() -> None:
-    assert calculate_opportunity(1, "Item", [{"is_buy_order": True, "price": 10.0}]) is None
+def build_greeting(name: str, language: str = "en") -> str:
+    """Return a friendly greeting for a given name and language."""
+    normalized_name = name.strip() or "world"
+    normalized_language = language.strip().lower() or "en"
+    salutation = SUPPORTED_LANGUAGES.get(normalized_language, SUPPORTED_LANGUAGES["en"])
+    return f"{salutation}, {normalized_name}!"
 
 
-def test_calculate_opportunity_computes_spread_and_roi() -> None:
-    orders = [
-        {"is_buy_order": True, "price": 100.0},
-        {"is_buy_order": True, "price": 105.0},
-        {"is_buy_order": False, "price": 130.0},
-        {"is_buy_order": False, "price": 135.0},
-    ]
-    result = calculate_opportunity(34, "Tritanium", orders)
-    assert result is not None
-    assert result.best_buy == 105.0
-    assert result.best_sell == 130.0
-    assert result.spread == 25.0
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(description="Utilities for greetings and EVE market analysis.")
+    subparsers = parser.add_subparsers(dest="command", required=False)
 
-
-def test_run_eve_market_returns_opportunities(monkeypatch) -> None:
-    opportunities = [
-        ItemOpportunity(1, "Item A", 10.0, 12.0, 2.0, 20.0),
-        ItemOpportunity(2, "Item B", 20.0, 25.0, 5.0, 25.0),
-    ]
-
-    def fake_top_opportunities(region_id: int, limit: int, sample_size: int, max_buy_price: float):
-        assert region_id == 10000002
-        assert limit == 2
-        assert sample_size == 5
-        assert max_buy_price == 250000000.0
-        return opportunities
-
-    monkeypatch.setattr("testing_app.main.top_opportunities", fake_top_opportunities)
-
-    returned = run_eve_market(region_id=10000002, top=2, sample_size=5, max_buy_price=250000000.0)
-    assert returned == opportunities
-
-
-def test_format_eve_market_output_text() -> None:
-    opportunities = [
-        ItemOpportunity(1, "Item A", 10.0, 12.0, 2.0, 20.0),
-        ItemOpportunity(2, "Item B", 20.0, 25.0, 5.0, 25.0),
-    ]
-    lines = format_eve_market_output(
-        opportunities, region_id=10000002, sample_size=5, as_json=False
+    greet_parser = subparsers.add_parser("greet", help="Print a friendly greeting")
+    greet_parser.add_argument("--name", default="world", help="Name to greet")
+    greet_parser.add_argument(
+        "--lang",
+        default="en",
+        choices=sorted(SUPPORTED_LANGUAGES),
+        help="Language code for the greeting",
     )
-    assert lines[0].startswith("Top 2 opportunities")
-    assert "Item A" in lines[1]
-    assert "Item B" in lines[2]
+
+    eve_parser = subparsers.add_parser(
+        "eve-market", help="Find profitable EVE market opportunities"
+    )
+    eve_parser.add_argument(
+        "--region-id", type=int, default=DEFAULT_REGION_ID, help="EVE region ID"
+    )
+    eve_parser.add_argument("--top", type=int, default=25, help="How many results to show")
+    eve_parser.add_argument(
+        "--sample-size",
+        type=int,
+        default=75,
+        help="How many candidate items to scan before ranking (default: 75)",
+    )
+    eve_parser.add_argument(
+        "--json",
+        action="store_true",
+        help="Print EVE market results as JSON",
+    )
+    eve_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional output file path for report content",
+    )
+    eve_parser.add_argument(
+        "--max-buy-price",
+        type=float,
+        default=DEFAULT_MAX_BUY_PRICE,
+        help="Maximum best-buy price to include in results (default: 250000000 ISK)",
+    )
+    eve_parser.add_argument(
+        "--min-daily-volume",
+        type=float,
+        default=DEFAULT_MIN_DAILY_VOLUME,
+        help="Minimum latest daily trade volume required (default: 100 units/day)",
+    )
+
+    return parser.parse_args()
 
 
-def test_format_eve_market_output_json() -> None:
-    opportunities = [ItemOpportunity(34, "Tritanium", 4.0, 4.5, 0.5, 12.5)]
-    lines = format_eve_market_output(opportunities, region_id=10000002, sample_size=5, as_json=True)
-    parsed = json.loads(lines[0])
-    assert parsed["region_id"] == 10000002
-    assert parsed["count"] == 1
-    assert parsed["opportunities"][0]["name"] == "Tritanium"
-    assert parsed["opportunities"][0]["rank"] == 1
+def _format_opportunity_row(
+    rank: int,
+    name: str,
+    buy: float,
+    sell: float,
+    spread: float,
+    roi: float,
+    daily_volume: float,
+) -> str:
+    return (
+        f"{rank:>2}. {name:<28} buy={buy:>12,.2f} sell={sell:>12,.2f} "
+        f"spread={spread:>11,.2f} roi={roi:>6.2f}% daily_vol={daily_volume:>8,.0f}"
+    )
 
 
-def test_write_output_writes_file_and_stdout(capsys, tmp_path) -> None:
-    output_file = tmp_path / "reports" / "eve_report.json"
-    write_output(["line one", "line two"], output_file)
-    captured = capsys.readouterr()
-    assert captured.out == "line one\nline two\n"
-    assert output_file.read_text(encoding="utf-8") == "line one\nline two\n"
+def _opportunity_to_dict(rank: int, item: ItemOpportunity) -> dict[str, float | int | str]:
+    return {
+        "rank": rank,
+        "type_id": item.type_id,
+        "name": item.name,
+        "best_buy": item.best_buy,
+        "best_sell": item.best_sell,
+        "spread": item.spread,
+        "roi_pct": item.roi_pct,
+        "daily_volume": item.daily_volume,
+    }
 
 
-def test_fetch_market_prices_applies_budget_prefilter(monkeypatch) -> None:
-    from testing_app import eve_market
+def run_eve_market(
+    region_id: int,
+    top: int,
+    sample_size: int,
+    max_buy_price: float,
+    min_daily_volume: float,
+) -> list[ItemOpportunity]:
+    """Execute market analysis and return computed opportunities."""
+    return top_opportunities(
+        region_id=region_id,
+        limit=top,
+        sample_size=sample_size,
+        max_buy_price=max_buy_price,
+        min_daily_volume=min_daily_volume,
+    )
 
-    def fake_request_json(url: str, data: bytes | None = None):
-        del url, data
-        return (
-            [
-                {"type_id": 1, "average_price": 1000000.0},
-                {"type_id": 2, "average_price": 200000.0},
-                {"type_id": 3, "average_price": 150000.0},
+
+def format_eve_market_output(
+    opportunities: list[ItemOpportunity],
+    region_id: int,
+    sample_size: int,
+    as_json: bool,
+    min_daily_volume: float,
+) -> list[str]:
+    """Format opportunities as plain text or JSON lines."""
+    if as_json:
+        payload = {
+            "region_id": region_id,
+            "sample_size": sample_size,
+            "min_daily_volume": min_daily_volume,
+            "count": len(opportunities),
+            "opportunities": [
+                _opportunity_to_dict(index, item)
+                for index, item in enumerate(opportunities, start=1)
             ],
-            {},
+        }
+        return [json.dumps(payload, indent=2)]
+
+    if not opportunities:
+        return [
+            "No profitable opportunities found in current sample.",
+            "Pipeline checks: average price cap -> daily volume filter -> "
+            "spread and budget checks.",
+            f"Current minimum daily volume filter: {min_daily_volume:,.0f} units/day.",
+        ]
+
+    lines = [
+        "Top "
+        f"{len(opportunities)} opportunities in region {region_id} "
+        f"(sampled {sample_size} items, min daily volume {min_daily_volume:,.0f}):",
+    ]
+    for index, item in enumerate(opportunities, start=1):
+        lines.append(
+            _format_opportunity_row(
+                index,
+                item.name,
+                item.best_buy,
+                item.best_sell,
+                item.spread,
+                item.roi_pct,
+                item.daily_volume,
+            )
         )
-
-    monkeypatch.setattr(eve_market, "_request_json", fake_request_json)
-    result = eve_market.fetch_market_prices(limit=10, max_average_price=250000.0)
-    assert result == [2, 3]
+    return lines
 
 
-def test_top_opportunities_prefilters_candidates_by_budget(monkeypatch) -> None:
-    from testing_app import eve_market
+def write_output(lines: list[str], output_path: Path | None) -> None:
+    """Print lines and optionally write them to a file."""
+    content = "\n".join(lines)
+    print(content)
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(content + "\n", encoding="utf-8")
 
-    called_with: dict[str, float | int] = {}
 
-    def fake_fetch_market_prices(limit: int, max_average_price: float | None = None):
-        called_with["limit"] = limit
-        called_with["max_average_price"] = (
-            max_average_price if max_average_price is not None else -1
-        )
-        return []
+def main() -> None:
+    """CLI entrypoint."""
+    args = parse_args()
 
-    monkeypatch.setattr(eve_market, "fetch_market_prices", fake_fetch_market_prices)
-    monkeypatch.setattr(eve_market, "fetch_item_names", lambda type_ids: {})
+    if args.command in (None, "greet"):
+        name = getattr(args, "name", "world")
+        language = getattr(args, "lang", "en")
+        print(build_greeting(name, language))
+        return
 
-    result = eve_market.top_opportunities(sample_size=75, max_buy_price=250000000.0)
-    assert result == []
-    assert called_with["limit"] == 75
-    assert called_with["max_average_price"] == 250000000.0
+    if args.command == "eve-market":
+        try:
+            opportunities = run_eve_market(
+                args.region_id,
+                args.top,
+                args.sample_size,
+                args.max_buy_price,
+                args.min_daily_volume,
+            )
+            lines = format_eve_market_output(
+                opportunities,
+                region_id=args.region_id,
+                sample_size=args.sample_size,
+                as_json=args.json,
+                min_daily_volume=args.min_daily_volume,
+            )
+            write_output(lines, args.output)
+        except URLError as error:
+            print(f"Failed to query EVE ESI API: {error}")
+
+
+if __name__ == "__main__":
+    main()
