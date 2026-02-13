@@ -11,6 +11,9 @@ ESI_BASE_URL = "https://esi.evetech.net/latest"
 DEFAULT_REGION_ID = 10000002  # The Forge (Jita)
 DEFAULT_MAX_BUY_PRICE = 250_000_000.0
 DEFAULT_MIN_DAILY_VOLUME = 100.0
+DEFAULT_SALES_TAX_PCT = 4.5
+DEFAULT_BROKER_FEE_PCT = 3.0
+DEFAULT_MIN_NET_PROFIT = 0.0
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,8 @@ class ItemOpportunity:
     spread: float
     roi_pct: float
     daily_volume: float
+    net_profit: float
+    net_roi_pct: float
 
 
 def _request_json(url: str, data: bytes | None = None) -> tuple[Any, dict[str, str]]:
@@ -128,6 +133,8 @@ def calculate_opportunity(
     name: str,
     orders: list[dict[str, object]],
     daily_volume: float,
+    sales_tax_pct: float,
+    broker_fee_pct: float,
 ) -> ItemOpportunity | None:
     """Calculate spread and ROI for one item from raw orders."""
     buy_prices: list[float] = []
@@ -155,7 +162,24 @@ def calculate_opportunity(
         return None
 
     roi_pct = (spread / best_buy) * 100
-    return ItemOpportunity(type_id, name, best_buy, best_sell, spread, roi_pct, daily_volume)
+
+    fee_multiplier = (sales_tax_pct + broker_fee_pct) / 100
+    net_profit = (best_sell * (1 - fee_multiplier)) - best_buy
+    net_roi_pct = (net_profit / best_buy) * 100
+    if net_profit <= 0:
+        return None
+
+    return ItemOpportunity(
+        type_id,
+        name,
+        best_buy,
+        best_sell,
+        spread,
+        roi_pct,
+        daily_volume,
+        net_profit,
+        net_roi_pct,
+    )
 
 
 def top_opportunities(
@@ -164,6 +188,9 @@ def top_opportunities(
     sample_size: int = 75,
     max_buy_price: float = DEFAULT_MAX_BUY_PRICE,
     min_daily_volume: float = DEFAULT_MIN_DAILY_VOLUME,
+    sales_tax_pct: float = DEFAULT_SALES_TAX_PCT,
+    broker_fee_pct: float = DEFAULT_BROKER_FEE_PCT,
+    min_net_profit: float = DEFAULT_MIN_NET_PROFIT,
 ) -> list[ItemOpportunity]:
     """Compute top profitable market opportunities from sampled items."""
     candidate_ids = fetch_market_prices(limit=sample_size, max_average_price=max_buy_price)
@@ -177,9 +204,20 @@ def top_opportunities(
 
         orders = fetch_orders_for_item(region_id, type_id)
         name = names.get(type_id, f"Type {type_id}")
-        opportunity = calculate_opportunity(type_id, name, orders, daily_volume)
-        if opportunity is not None and opportunity.best_buy <= max_buy_price:
+        opportunity = calculate_opportunity(
+            type_id,
+            name,
+            orders,
+            daily_volume,
+            sales_tax_pct,
+            broker_fee_pct,
+        )
+        if (
+            opportunity is not None
+            and opportunity.best_buy <= max_buy_price
+            and opportunity.net_profit >= min_net_profit
+        ):
             opportunities.append(opportunity)
 
-    opportunities.sort(key=lambda item: item.spread, reverse=True)
+    opportunities.sort(key=lambda item: item.net_profit, reverse=True)
     return opportunities[:limit]
