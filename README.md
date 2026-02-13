@@ -73,23 +73,24 @@ PYTHONPATH=src python -m testing_app.main greet --name "Newcomer" --lang fr
 EVE market mode:
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30 --max-buy-price 250000
 ```
 
 JSON output for scripting/spreadsheets:
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30 --json
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30 --max-buy-price 250000 --json
 ```
 
 Write report directly to a file (`--output`):
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30 --json --output reports/eve_report.json
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30 --max-buy-price 250000 --json --output reports/eve_report.json
 ```
 
 ## Notes
 
 - This tool uses public market data only (no auth needed).
+- Default budget filter: only items with `best_buy <= 250,000 ISK` are included; adjust with `--max-buy-price`.
 - Reported opportunities are raw spread-based estimates and do **not** subtract broker fees,
   sales tax, hauling risk, volume limits, or price movement risk.
