@@ -9,6 +9,7 @@ from urllib import parse, request
 
 ESI_BASE_URL = "https://esi.evetech.net/latest"
 DEFAULT_REGION_ID = 10000002  # The Forge (Jita)
+DEFAULT_MAX_BUY_PRICE = 250_000.0
 
 
 @dataclass(frozen=True)
@@ -130,7 +131,10 @@ def calculate_opportunity(
 
 
 def top_opportunities(
-    region_id: int = DEFAULT_REGION_ID, limit: int = 10, sample_size: int = 30
+    region_id: int = DEFAULT_REGION_ID,
+    limit: int = 10,
+    sample_size: int = 30,
+    max_buy_price: float = DEFAULT_MAX_BUY_PRICE,
 ) -> list[ItemOpportunity]:
     """Compute top profitable market opportunities from sampled items."""
     candidate_ids = fetch_market_prices(limit=sample_size)
@@ -141,7 +145,7 @@ def top_opportunities(
         orders = fetch_orders_for_item(region_id, type_id)
         name = names.get(type_id, f"Type {type_id}")
         opportunity = calculate_opportunity(type_id, name, orders)
-        if opportunity is not None:
+        if opportunity is not None and opportunity.best_buy <= max_buy_price:
             opportunities.append(opportunity)
 
     opportunities.sort(key=lambda item: item.spread, reverse=True)
