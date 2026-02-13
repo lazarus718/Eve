@@ -3,7 +3,12 @@
 import json
 
 from testing_app.eve_market import ItemOpportunity, calculate_opportunity
-from testing_app.main import build_greeting, format_eve_market_output, run_eve_market
+from testing_app.main import (
+    build_greeting,
+    format_eve_market_output,
+    run_eve_market,
+    write_output,
+)
 
 
 def test_greets_name() -> None:
@@ -38,15 +43,16 @@ def test_run_eve_market_returns_opportunities(monkeypatch) -> None:
         ItemOpportunity(2, "Item B", 20.0, 25.0, 5.0, 25.0),
     ]
 
-    def fake_top_opportunities(region_id: int, limit: int, sample_size: int):
+    def fake_top_opportunities(region_id: int, limit: int, sample_size: int, max_buy_price: float):
         assert region_id == 10000002
         assert limit == 2
         assert sample_size == 5
+        assert max_buy_price == 250000.0
         return opportunities
 
     monkeypatch.setattr("testing_app.main.top_opportunities", fake_top_opportunities)
 
-    returned = run_eve_market(region_id=10000002, top=2, sample_size=5)
+    returned = run_eve_market(region_id=10000002, top=2, sample_size=5, max_buy_price=250000.0)
     assert returned == opportunities
 
 
@@ -71,3 +77,11 @@ def test_format_eve_market_output_json() -> None:
     assert parsed["count"] == 1
     assert parsed["opportunities"][0]["name"] == "Tritanium"
     assert parsed["opportunities"][0]["rank"] == 1
+
+
+def test_write_output_writes_file_and_stdout(capsys, tmp_path) -> None:
+    output_file = tmp_path / "reports" / "eve_report.json"
+    write_output(["line one", "line two"], output_file)
+    captured = capsys.readouterr()
+    assert captured.out == "line one\nline two\n"
+    assert output_file.read_text(encoding="utf-8") == "line one\nline two\n"
