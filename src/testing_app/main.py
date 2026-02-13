@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from pathlib import Path
 from urllib.error import URLError
 
 from .eve_market import DEFAULT_REGION_ID, ItemOpportunity, top_opportunities
@@ -54,6 +55,11 @@ def parse_args() -> argparse.Namespace:
         "--json",
         action="store_true",
         help="Print EVE market results as JSON",
+    )
+    eve_parser.add_argument(
+        "--output",
+        type=Path,
+        help="Optional output file path for report content",
     )
 
     return parser.parse_args()
@@ -119,6 +125,15 @@ def format_eve_market_output(
             )
         )
     return lines
+
+
+def write_output(lines: list[str], output_path: Path | None) -> None:
+    """Print lines and optionally write them to a file."""
+    content = "\n".join(lines)
+    print(content)
+    if output_path is not None:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(content + "\n", encoding="utf-8")
 
 
 def main() -> None:
