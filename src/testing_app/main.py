@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     eve_parser.add_argument(
         "--region-id", type=int, default=DEFAULT_REGION_ID, help="EVE region ID"
     )
-    eve_parser.add_argument("--top", type=int, default=10, help="How many results to show")
+    eve_parser.add_argument("--top", type=int, default=25, help="How many results to show")
     eve_parser.add_argument(
         "--sample-size",
         type=int,
