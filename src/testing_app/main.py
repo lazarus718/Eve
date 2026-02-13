@@ -149,13 +149,13 @@ def main() -> None:
     if args.command == "eve-market":
         try:
             opportunities = run_eve_market(args.region_id, args.top, args.sample_size)
-            for line in format_eve_market_output(
+            lines = format_eve_market_output(
                 opportunities,
                 region_id=args.region_id,
                 sample_size=args.sample_size,
                 as_json=args.json,
-            ):
-                print(line)
+            )
+            write_output(lines, args.output)
         except URLError as error:
             print(f"Failed to query EVE ESI API: {error}")
 
