@@ -73,19 +73,19 @@ PYTHONPATH=src python -m testing_app.main greet --name "Newcomer" --lang fr
 EVE market mode:
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 75 --max-buy-price 250000000
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000
 ```
 
 JSON output for scripting/spreadsheets:
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 75 --max-buy-price 250000000 --json
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000 --json
 ```
 
 Write report directly to a file (`--output`):
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 75 --max-buy-price 250000000 --json --output reports/eve_report.json
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 25 --sample-size 75 --max-buy-price 250000000 --json --output reports/eve_report.json
 ```
 
 ## Notes
@@ -99,3 +99,20 @@ PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 
   4. Keep only profitable items with `spread > 0` and `best_buy <= max_buy_price`, then rank by spread.
 - Reported opportunities are raw spread-based estimates and do **not** subtract broker fees,
   sales tax, hauling risk, volume limits, or price movement risk.
+
+## Major market hub region IDs
+
+Use these with `--region-id` to scan common trade hubs:
+
+- **Jita** (The Forge): `10000002`
+- **Amarr** (Domain): `10000043`
+- **Dodixie** (Sinq Laison): `10000032`
+- **Rens** (Heimatar): `10000030`
+- **Hek** (Metropolis): `10000042`
+
+Example:
+
+```bash
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000043 --top 25 --sample-size 75 --max-buy-price 250000000
+```
+
