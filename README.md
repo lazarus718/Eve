@@ -116,6 +116,6 @@ Use these with `--region-id` to scan common trade hubs:
 Example:
 
 ```bash
-PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000043 --top 25 --sample-size 75 --max-buy-price 250000000 --min-daily-volume 100
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000043 --top 15 --sample-size 500 --max-buy-price 125000000 --min-daily-volume 10
 ```
 
