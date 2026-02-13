@@ -84,6 +84,12 @@ PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 
 
 ## Notes
 
+```bash
+PYTHONPATH=src python -m testing_app.main eve-market --region-id 10000002 --top 10 --sample-size 30 --json --output reports/eve_report.json
+```
+
+## Notes
+
 - This tool uses public market data only (no auth needed).
 - Reported opportunities are raw spread-based estimates and do **not** subtract broker fees,
   sales tax, hauling risk, volume limits, or price movement risk.
