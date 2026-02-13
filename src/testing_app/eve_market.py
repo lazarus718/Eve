@@ -10,6 +10,7 @@ from urllib import parse, request
 ESI_BASE_URL = "https://esi.evetech.net/latest"
 DEFAULT_REGION_ID = 10000002  # The Forge (Jita)
 DEFAULT_MAX_BUY_PRICE = 250_000_000.0
+DEFAULT_MIN_DAILY_VOLUME = 100.0
 
 
 @dataclass(frozen=True)
@@ -22,6 +23,7 @@ class ItemOpportunity:
     best_sell: float
     spread: float
     roi_pct: float
+    daily_volume: float
 
 
 def _request_json(url: str, data: bytes | None = None) -> tuple[Any, dict[str, str]]:
@@ -82,6 +84,27 @@ def fetch_orders_for_item(region_id: int, type_id: int) -> list[dict[str, object
     return orders
 
 
+def fetch_item_daily_volume(region_id: int, type_id: int) -> float | None:
+    """Fetch latest daily traded volume for an item in a region."""
+    params = parse.urlencode({"datasource": "tranquility", "type_id": type_id})
+    url = f"{ESI_BASE_URL}/markets/{region_id}/history/?{params}"
+    payload, _ = _request_json(url)
+    if not isinstance(payload, list):
+        return None
+
+    latest_volume: float | None = None
+    latest_date = ""
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        date = entry.get("date")
+        volume = entry.get("volume")
+        if isinstance(date, str) and isinstance(volume, (int, float)) and date >= latest_date:
+            latest_date = date
+            latest_volume = float(volume)
+    return latest_volume
+
+
 def fetch_item_names(type_ids: list[int]) -> dict[int, str]:
     """Resolve type IDs to in-game names."""
     if not type_ids:
@@ -101,7 +124,10 @@ def fetch_item_names(type_ids: list[int]) -> dict[int, str]:
 
 
 def calculate_opportunity(
-    type_id: int, name: str, orders: list[dict[str, object]]
+    type_id: int,
+    name: str,
+    orders: list[dict[str, object]],
+    daily_volume: float,
 ) -> ItemOpportunity | None:
     """Calculate spread and ROI for one item from raw orders."""
     buy_prices: list[float] = []
@@ -129,7 +155,7 @@ def calculate_opportunity(
         return None
 
     roi_pct = (spread / best_buy) * 100
-    return ItemOpportunity(type_id, name, best_buy, best_sell, spread, roi_pct)
+    return ItemOpportunity(type_id, name, best_buy, best_sell, spread, roi_pct, daily_volume)
 
 
 def top_opportunities(
@@ -137,6 +163,7 @@ def top_opportunities(
     limit: int = 25,
     sample_size: int = 75,
     max_buy_price: float = DEFAULT_MAX_BUY_PRICE,
+    min_daily_volume: float = DEFAULT_MIN_DAILY_VOLUME,
 ) -> list[ItemOpportunity]:
     """Compute top profitable market opportunities from sampled items."""
     candidate_ids = fetch_market_prices(limit=sample_size, max_average_price=max_buy_price)
@@ -144,9 +171,13 @@ def top_opportunities(
 
     opportunities: list[ItemOpportunity] = []
     for type_id in candidate_ids:
+        daily_volume = fetch_item_daily_volume(region_id, type_id)
+        if daily_volume is None or daily_volume < min_daily_volume:
+            continue
+
         orders = fetch_orders_for_item(region_id, type_id)
         name = names.get(type_id, f"Type {type_id}")
-        opportunity = calculate_opportunity(type_id, name, orders)
+        opportunity = calculate_opportunity(type_id, name, orders, daily_volume)
         if opportunity is not None and opportunity.best_buy <= max_buy_price:
             opportunities.append(opportunity)
 
